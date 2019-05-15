@@ -1,0 +1,105 @@
+variables:
+  CI_DEBUG_TRACE: "false"
+  SCHEDULER_PARAMETERS: "--nodes=1 --qos=debug --constraint=haswell --time=0:30:00"
+stages:
+  - build
+  - test
+
+build:
+  stage: build
+  script:
+    # setup the build.
+    - PROJECT_HOME=$(pwd)
+    - PROJECT_BUILD_DIR=$PROJECT_HOME/build
+    - mkdir -p ${PROJECT_BUILD_DIR}
+    # On Cori this module is the latest cmake
+    - module load cmake/3.8.2
+    - echo "CORI Build modules list follows"
+    - module list
+    # No need to load any module on Cori as the default PrgEnv__intel should work
+    # setup variables needed for BLT:
+    # https://github.com/LLNL/blt
+    - BLT_CC=cc
+    - BLT_CXX=CC
+    - BLT_FC=ftn
+    - BLT_FORTRAN=ON
+    - BLT_OPENMP=ON
+    - BLT_GTEST=ON
+    - BLT_FRUIT=ON
+    - BLT_GMOCK=OFF
+    - BLT_SOURCE_DIR=${PROJECT_HOME}/blt/master_20Feb19
+# point to blt
+    - CMAKE_OPTS="-DBLT_SOURCE_DIR=${BLT_SOURCE_DIR}"
+# build type and install loc
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_BUILD_TYPE=Debug"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_INSTALL_PREFIX=../travis-debug-install"
+# c & c++ compilers
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_C_COMPILER=${BLT_CC}"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_CXX_COMPILER=${BLT_CXX}"
+# gtest support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_GTEST=${BLT_GTEST}"
+# gmock support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_GMOCK=${BLT_GMOCK}"
+# fruit support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_FRUIT=${BLT_FRUIT}"
+# benchmarking
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_BENCHMARKS=ON"
+# enable fortran support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_FORTRAN=${BLT_FORTRAN}"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_Fortran_COMPILER=${BLT_FC}"
+# openmp support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_OPENMP=${BLT_OPENMP}"
+# mpi support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_MPI=ON"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DMPI_C_COMPILER=cc"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DMPI_CXX_COMPILER=CC"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DMPI_Fortran_COMPILER=ftn"
+# test git macros
+    - CMAKE_OPTS="${CMAKE_OPTS} -DTEST_GIT_MACROS=ON"
+#########################################################
+#########################################################
+#  tests
+#########################################################
+#########################################################
+# override prev gtest setting, these projects req gtest
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_GTEST=ON"
+#########################################################
+# test src/calc_pi
+#########################################################
+    - cd ${PROJECT_BUILD_DIR}
+    - mkdir -p test-src/calc_pi
+    - cd test-src/calc_pi
+    - cmake -DMPI_FOUND=1 -DENABLE_MPI=1 -DMPIEXEC_NUMPROC_FLAG:STRING=-n ${CMAKE_OPTS} ${PROJECT_HOME}/src/calc_pi
+    - make
+  tags:
+    - cori
+  only:
+     refs:
+       - web
+       
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-$CI_JOB_STAGE"
+    paths:
+      - build/
+#      - src/
+
+test:
+  stage: test
+  dependencies:
+    - build
+  script:
+    # reset CI_BUILD_DIR here.  The travis ci
+    # job does build, test, install in one fell swoop.
+    - PROJECT_HOME=$(pwd)
+    - PROJECT_BUILD_DIR=$PROJECT_HOME/build
+    - cd ${PROJECT_BUILD_DIR}
+    - cd test-src/calc_pi
+    - env CTEST_OUTPUT_ON_FAILURE=1 make test
+
+  tags:
+    - cori
+
+  only:
+     refs:
+       - web
+
