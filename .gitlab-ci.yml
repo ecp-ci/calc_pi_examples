@@ -1,0 +1,153 @@
+# This gitlab-ci.yaml was created specifically for the NMC P9
+# batch runner based in the existing .travis.yaml file.
+# The travis ci job appears to be created for an ubuntu based
+# x86_64 system.
+#
+# The SCHEDULER_PARAMETERS below are specific to the NMC P9 nodes.
+#
+variables:
+  CI_DEBUG_TRACE: "false"
+  NMC_FE1_SCHEDULER_PARAMETERS: "--nodes=1 --partition=ecp-p9-4v100 --overcommit"
+
+# define our stages.
+#
+stages:
+  - build
+  - test
+
+# This is the NMC P9 batch runner.
+#
+.runner: &runner
+  - xx-testing
+  - dosequis
+  - slurm
+  - nmc
+
+# These build steps are specific to the NMC P9 batch runner nodes.
+#
+build:
+  stage: build
+  script:
+    # setup the build.
+    - PROJECT_HOME=$(pwd)
+    - PROJECT_BUILD_DIR=$PROJECT_HOME/build
+    - mkdir -p ${PROJECT_BUILD_DIR}
+    # Pick up gnu 8.2.1 from Advance Toolkit for Linux on Power.
+    # On Mirage this is module load at/12.0.
+    # On the batch runner nodes this is module load at12.0.
+    # Using batch runner in this example.
+    - module load at12.0
+    # calc_pi requires mpi.  Use modules to load the default mpi on
+    # the NMC P9.(openmpi)
+    # The travis example uses mpich2.
+    # module load mpi/openmpi3-ppc64le for openmpi3.
+    - module load mpi
+    # The travis example builds and installs cmake 3.8.0 via a
+    # wget of the sources (x86_64 build script for 3.8) from 
+    # cmake.org and adds that to $PATH.
+    # The NMC P9 has no module for cmake 3 but a cmake sufficient for
+    # BLT is present. Need at least cmake 3.8.0 for blt.
+    # This alias code gets us the installed cmake 3 on the NMC P9.
+    # Alternatively we could have simply replicated the travis code to
+    # build and setup cmake 3.8 here.
+    - shopt -s expand_aliases
+    - alias cmake=/usr/bin/cmake3
+    - CMAKE_MAJOR=3.13
+    - CMAKE_MINOR=4
+    # The travis example uses gnu 4.9 compilers.
+    # For the NMC P9 we will use the gnu 8.2.1 compilers available
+    # from loading the at12.0 module above.
+    # setup variables needed for BLT:
+    # https://github.com/LLNL/blt
+    # The code that follows here was taken verbatim from the travis.yml
+    # file with minor modifications (removing compiler versions).
+    - BLT_CC=gcc
+    - BLT_CXX=g++
+    - BLT_FC=gfortran
+    - BLT_FORTRAN=ON
+    - BLT_OPENMP=ON
+    - BLT_GTEST=ON
+    - BLT_FRUIT=ON
+    - BLT_GMOCK=OFF
+    - BLT_SOURCE_DIR=${PROJECT_HOME}/blt/master_20Feb19
+# point to blt
+    - CMAKE_OPTS="-DBLT_SOURCE_DIR=${BLT_SOURCE_DIR}"
+# build type and install loc
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_BUILD_TYPE=Debug"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_INSTALL_PREFIX=../travis-debug-install"
+# c & c++ compilers
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_C_COMPILER=${BLT_CC}"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_CXX_COMPILER=${BLT_CXX}"
+# gtest support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_GTEST=${BLT_GTEST}"
+# gmock support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_GMOCK=${BLT_GMOCK}"
+# fruit support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_FRUIT=${BLT_FRUIT}"
+# benchmarking
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_BENCHMARKS=ON"
+# enable fortran support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_FORTRAN=${BLT_FORTRAN}"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DCMAKE_Fortran_COMPILER=${BLT_FC}"
+# openmp support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_OPENMP=${BLT_OPENMP}"
+# mpi support
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_MPI=ON"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DMPI_C_COMPILER=mpicc"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DMPI_CXX_COMPILER=mpicxx"
+    - CMAKE_OPTS="${CMAKE_OPTS} -DMPI_Fortran_COMPILER=mpif90"
+# test git macros
+    - CMAKE_OPTS="${CMAKE_OPTS} -DTEST_GIT_MACROS=ON"
+#########################################################
+#########################################################
+#  tests
+#########################################################
+#########################################################
+# override prev gtest setting, these projects req gtest
+    - CMAKE_OPTS="${CMAKE_OPTS} -DENABLE_GTEST=ON"
+#########################################################
+# test src/calc_pi
+#########################################################
+    - cd ${PROJECT_BUILD_DIR}
+    - mkdir -p test-src/calc_pi
+    - cd test-src/calc_pi
+    - cmake ${CMAKE_OPTS} ${PROJECT_HOME}/src/calc_pi
+    - make
+
+  tags:
+    *runner
+
+  only:
+     refs:
+       - web
+   
+  # With gitlab CI we need to preserve the build and src
+  # directory for the test stage (otherwise it is removed).
+  # One way to do that is using the key artifacts.  For
+  # projects with very large binaries, these can be copied
+  # somewhere and the used in later stages.
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-$CI_JOB_STAGE"
+    paths:
+      - build/
+      - src/
+
+test:
+  stage: test
+  dependencies:
+    - build
+  script:
+    # reset CI_BUILD_DIR here.  The travis ci
+    # job does build, test, install in one fell swoop.
+    - PROJECT_HOME=$(pwd)
+    - PROJECT_BUILD_DIR=$PROJECT_HOME/build
+    - cd ${PROJECT_BUILD_DIR}
+    - cd test-src/calc_pi
+    - env CTEST_OUTPUT_ON_FAILURE=1 make test
+
+  tags:
+    *runner
+
+  only:
+     refs:
+       - web
