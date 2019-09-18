@@ -36,12 +36,13 @@ build:
     # On Mirage this is module load at/12.0.
     # On the batch runner nodes this is module load at12.0.
     # Using batch runner in this example.
-    - module load at12.0
+    - module load gcc/8.3.0
     # calc_pi requires mpi.  Use modules to load the default mpi on
     # the NMC P9.(openmpi)
     # The travis example uses mpich2.
     # module load mpi/openmpi3-ppc64le for openmpi3.
-    - module load mpi
+    #- module load openmpi
+    - module load mpich/3.3.1
     # The travis example builds and installs cmake 3.8.0 via a
     # wget of the sources (x86_64 build script for 3.8) from 
     # cmake.org and adds that to $PATH.
@@ -51,9 +52,10 @@ build:
     # Alternatively we could have simply replicated the travis code to
     # build and setup cmake 3.8 here.
     - shopt -s expand_aliases
-    - alias cmake=/usr/bin/cmake3
-    - CMAKE_MAJOR=3.13
-    - CMAKE_MINOR=4
+    # - alias cmake=/usr/bin/cmake3
+    - module load cmake/3.14.5
+    - CMAKE_MAJOR=3.14
+    - CMAKE_MINOR=5
     # The travis example uses gnu 4.9 compilers.
     # For the NMC P9 we will use the gnu 8.2.1 compilers available
     # from loading the at12.0 module above.
