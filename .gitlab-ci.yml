@@ -32,33 +32,24 @@ build:
     - PROJECT_HOME=$(pwd)
     - PROJECT_BUILD_DIR=$PROJECT_HOME/build
     - mkdir -p ${PROJECT_BUILD_DIR}
-    # Pick up gnu 8.2.1 from Advance Toolkit for Linux on Power.
-    # On Mirage this is module load at/12.0.
-    # On the batch runner nodes this is module load at12.0.
-    # Using batch runner in this example.
+    # Pick up gnu 8.3.0 module on p901/p902
     - module load gcc/8.3.0
     # calc_pi requires mpi.  Use modules to load the default mpi on
     # the NMC P9.(openmpi)
-    # The travis example uses mpich2.
-    # module load mpi/openmpi3-ppc64le for openmpi3.
-    #- module load openmpi
+    # The travis example uses mpich2.  This example uses mpich
     - module load mpich/3.3.1
     # The travis example builds and installs cmake 3.8.0 via a
     # wget of the sources (x86_64 build script for 3.8) from 
     # cmake.org and adds that to $PATH.
-    # The NMC P9 has no module for cmake 3 but a cmake sufficient for
-    # BLT is present. Need at least cmake 3.8.0 for blt.
-    # This alias code gets us the installed cmake 3 on the NMC P9.
-    # Alternatively we could have simply replicated the travis code to
-    # build and setup cmake 3.8 here.
+    # The NMC P9 has a module for cmake 3 .14.5 which is a cmake sufficient for
+    # BLT. Need at least cmake 3.8.0 for blt.
     - shopt -s expand_aliases
-    # - alias cmake=/usr/bin/cmake3
     - module load cmake/3.14.5
     - CMAKE_MAJOR=3.14
     - CMAKE_MINOR=5
     # The travis example uses gnu 4.9 compilers.
-    # For the NMC P9 we will use the gnu 8.2.1 compilers available
-    # from loading the at12.0 module above.
+    # For the NMC P9 we will use the gnu 8.3.0 compilers available
+    # from loading the module above.
     # setup variables needed for BLT:
     # https://github.com/LLNL/blt
     # The code that follows here was taken verbatim from the travis.yml
